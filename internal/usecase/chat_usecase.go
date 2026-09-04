@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/IlucielI/insurance-policy-core-api/internal/domain"
-	"github.com/google/uuid"
 )
 
 type ChatRepository interface {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/IlucielI/insurance-policy-core-api/internal/delivery/http"
 	"github.com/IlucielI/insurance-policy-core-api/internal/repository"
+	"github.com/IlucielI/insurance-policy-core-api/internal/service"
 	"github.com/IlucielI/insurance-policy-core-api/internal/usecase"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -44,9 +45,9 @@ func main() {
 	authUsecase := usecase.NewAuthUsecase(userRepo)
 	applicationUsecase := usecase.NewApplicationUsecase(applicationRepo, productRepo)
 	
-	// TODO: Initialize LLM service for chat
-	// For now, chat usecase without LLM integration
-	chatUsecase := usecase.NewChatUsecase(chatRepo, productRepo)
+	// Initialize LLM service (mock for now, will integrate real LLM later)
+	llmService := service.NewMockLLMService()
+	chatUsecase := usecase.NewChatUsecase(chatRepo, llmService)
 
 	// Initialize handlers
 	productHandler := http.NewProductHandler(productUsecase)

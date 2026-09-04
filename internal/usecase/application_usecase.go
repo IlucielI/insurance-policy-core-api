@@ -23,7 +23,9 @@ type ApplicationUsecase struct {
 	}
 }
 
-func NewApplicationUsecase(appRepo ApplicationRepository, productRepo ProductRepository) *ApplicationUsecase {
+func NewApplicationUsecase(appRepo ApplicationRepository, productRepo interface {
+	GetByID(ctx context.Context, id string) (*domain.Product, error)
+}) *ApplicationUsecase {
 	return &ApplicationUsecase{
 		appRepo:     appRepo,
 		productRepo: productRepo,

@@ -19,9 +19,13 @@ func main() {
 	// Middleware
 	app.Use(recover.New())
 	app.Use(logger.New())
+	corsOrigins := os.Getenv("CORS_ORIGINS")
+	if corsOrigins == "" {
+		corsOrigins = "http://localhost:3000,http://localhost:3001"
+	}
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     os.Getenv("CORS_ORIGINS"),
-		AllowCredentials: true,
+		AllowOrigins:     corsOrigins,
+		AllowCredentials: false,
 	}))
 
 	// Health check

@@ -18,7 +18,9 @@ type ApplicationRepository interface {
 
 type ApplicationUsecase struct {
 	appRepo     ApplicationRepository
-	productRepo ProductRepository
+	productRepo interface {
+		GetByID(ctx context.Context, id string) (*domain.Product, error)
+	}
 }
 
 func NewApplicationUsecase(appRepo ApplicationRepository, productRepo ProductRepository) *ApplicationUsecase {

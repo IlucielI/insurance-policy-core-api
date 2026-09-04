@@ -43,12 +43,18 @@ func main() {
 	productUsecase := usecase.NewProductUsecase(productRepo)
 	authUsecase := usecase.NewAuthUsecase(userRepo)
 	applicationUsecase := usecase.NewApplicationUsecase(applicationRepo, productRepo)
+	
+	// TODO: Initialize LLM service for chat
+	// For now, chat usecase without LLM integration
 	chatUsecase := usecase.NewChatUsecase(chatRepo, productRepo)
 
 	// Initialize handlers
 	productHandler := http.NewProductHandler(productUsecase)
 	authHandler := http.NewAuthHandler(authUsecase)
 	chatHandler := http.NewChatHandler(chatUsecase)
+	
+	// TODO: Initialize application handler
+	_ = applicationUsecase // Will be used when handler is implemented
 
 	// Fiber app
 	app := fiber.New(fiber.Config{

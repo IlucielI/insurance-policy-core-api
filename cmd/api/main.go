@@ -69,7 +69,7 @@ func main() {
 	
 	corsOrigins := os.Getenv("CORS_ORIGINS")
 	if corsOrigins == "" {
-		corsOrigins = "*"
+		corsOrigins = "http://localhost:3000,http://localhost:3001,https://insurance-app.bayuanugerah.my.id,https://insurance-app-cms.bayuanugerah.my.id"
 	}
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     corsOrigins,

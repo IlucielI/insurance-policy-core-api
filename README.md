@@ -1,300 +1,267 @@
 # Insurance Policy Core API
 
-Backend API untuk Insurance Policy Application System, dibangun menggunakan Go + Fiber dengan Clean Architecture.
+Backend API for Insurance Policy Management System built with Go, Fiber, and PostgreSQL.
 
-## 🏗️ Tech Stack
+## Features
 
-- **Go 1.26+** (Fiber v2 web framework)
-- **PostgreSQL 16** dengan pgvector extension
-- **Redis** untuk session storage
-- **Clean Architecture + DDD** (Domain-Driven Design)
+- **Product Management**: CRUD operations for insurance products
+- **Application Workflow**: Draft → Submitted → Under Review → Approved/Rejected
+- **Premium Calculator**: Age-based premium calculation with coverage factors
+- **AI RAG Chatbot**: Semantic search over products using pgvector + LLM integration
+- **Clean Architecture**: Domain-driven design with clear separation of concerns
+- **RESTful API**: OpenAPI 3.0 specification included
 
-## 📁 Project Structure
+## Tech Stack
 
-```
-cmd/api/              # Application entry point
-internal/
-  ├── domain/         # Business entities (User, Product, Application)
-  ├── usecase/        # Business logic layer
-  ├── repository/     # Data access layer (pgx driver)
-  └── delivery/http/  # HTTP handlers (Fiber routes)
-config/               # Environment configuration
-migrations/           # Database migrations (pgvector setup)
-```
+- **Framework**: Go 1.26 + Fiber v2
+- **Database**: PostgreSQL 16 + pgvector
+- **Cache**: Redis
+- **Architecture**: Clean Architecture + DDD
+- **AI/ML**: pgvector embeddings + LLM API integration
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
-- Go 1.26 or higher
-- PostgreSQL 16 dengan pgvector extension
-- Redis server
+- Go 1.26+
+- PostgreSQL 16+
+- Redis (optional)
 
-### 1. Clone Repository
+### Local Development
 
-```bash
-git clone https://github.com/IlucielI/insurance-policy-core-api.git
-cd insurance-policy-core-api
-```
+1. **Clone repository**
+   ```bash
+   git clone https://github.com/IlucielI/insurance-policy-core-api.git
+   cd insurance-policy-core-api
+   ```
 
-### 2. Install Dependencies
+2. **Install dependencies**
+   ```bash
+   go mod download
+   ```
 
-```bash
-go mod download
-```
+3. **Setup database**
+   ```bash
+   # Create database
+   createdb insurance_policy
+   
+   # Run migrations
+   psql -U postgres -d insurance_policy < migrations/001_init_schema.sql
+   psql -U postgres -d insurance_policy < migrations/003_seed_correct.sql
+   ```
 
-### 3. Setup Environment Variables
+4. **Configure environment**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your configuration
+   ```
 
-Copy `.env.example` ke `.env`:
+   Required environment variables:
+   ```env
+   DATABASE_URL=postgres://postgres:password@localhost:5432/insurance_policy?sslmode=disable
+   PORT=8080
+   JWT_SECRET=your-secret-key
+   REDIS_URL=redis://localhost:6379/0
+   LLM_API_URL=http://your-llm-endpoint:20128/v1
+   ```
 
-```bash
-cp .env.example .env
-```
+5. **Run server**
+   ```bash
+   go run cmd/api/main.go
+   ```
 
-Edit `.env` file:
+   Server will start on `http://localhost:8080`
 
-```env
-PORT=8080
-DATABASE_URL=postgres://user:password@localhost:5432/insurance_policy?sslmode=disable
-REDIS_URL=redis://localhost:6379/0
-SESSION_SECRET=your-secret-key-here
-LLM_ENDPOINT=http://localhost:11434/v1  # Ollama atau OpenAI-compatible endpoint
-CORS_ORIGINS=http://localhost:3000,http://localhost:3001
-```
-
-### 4. Setup Database
-
-**Install pgvector extension:**
-
-```sql
-CREATE EXTENSION IF NOT EXISTS vector;
-```
-
-**Run migrations:**
-
-```bash
-psql $DATABASE_URL -f migrations/001_init_schema.sql
-```
-
-Atau manual:
-
-```sql
--- Copy isi migrations/001_init_schema.sql dan execute
-```
-
-### 5. Run Application
-
-**Development mode:**
+### Docker Deployment
 
 ```bash
-go run cmd/api/main.go
+# Build image
+docker build -t insurance-api .
+
+# Run container
+docker run -d \
+  --name insurance-api \
+  -p 8080:8080 \
+  -e DATABASE_URL="postgres://..." \
+  insurance-api
 ```
 
-**Build & run:**
+## API Documentation
 
+### OpenAPI Specification
+
+Full API documentation available in [docs/openapi.yaml](docs/openapi.yaml)
+
+**Interactive API docs:**
+- Swagger UI: Coming soon
+- ReDoc: Coming soon
+
+### Quick Reference
+
+**Base URL**: `http://localhost:8080/api/v1`
+
+**Health Check**
 ```bash
-go build -o insurance-api cmd/api/main.go
-./insurance-api
+curl http://localhost:8080/health
 ```
 
-Server akan jalan di `http://localhost:8080`
-
-## 📡 API Endpoints
-
-### Health Check
+**List Products**
 ```bash
-GET /health
+curl http://localhost:8080/api/v1/products
 ```
 
-### Products
+**Get Product by Slug**
 ```bash
-GET /api/v1/products                    # List all products
-GET /api/v1/products/:id                # Get product detail
-POST /api/v1/products/:id/calculate-premium  # Calculate premium
+curl http://localhost:8080/api/v1/products/asuransi-jiwa-premium
 ```
 
-### Applications
+**Calculate Premium**
 ```bash
-POST /api/v1/applications               # Submit new application
-GET /api/v1/applications/:id            # Get application detail
+curl -X POST http://localhost:8080/api/v1/products/asuransi-jiwa-premium/calculate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "age": 35,
+    "sum_assured": 500000000,
+    "payment_term": 120
+  }'
 ```
 
-### Chat (RAG Chatbot)
-```bash
-POST /api/v1/chat                       # Send message to AI assistant
-GET /api/v1/chat/:sessionId/history     # Get chat history
-```
-
-**Example request:**
+**Chat with AI**
 ```bash
 curl -X POST http://localhost:8080/api/v1/chat \
   -H "Content-Type: application/json" \
   -d '{
-    "session_id": "demo-session",
-    "message": "Apa saja produk asuransi yang tersedia?"
+    "message": "Produk asuransi apa saja yang tersedia?",
+    "session_id": "550e8400-e29b-41d4-a716-446655440000"
   }'
 ```
 
-### Admin Endpoints
-```bash
-PUT /api/v1/admin/applications/:id/status   # Update application status
-GET /api/v1/admin/applications              # List all applications
-POST /api/v1/admin/products                 # Create product (admin)
+## Project Structure
+
+```
+insurance-policy-core-api/
+├── cmd/
+│   └── api/
+│       └── main.go                 # Application entry point
+├── internal/
+│   ├── domain/                     # Domain entities
+│   ├── usecase/                    # Business logic
+│   ├── repository/                 # Data access layer
+│   ├── delivery/
+│   │   └── http/                   # HTTP handlers (Fiber)
+│   ├── infrastructure/
+│   │   ├── database/               # PostgreSQL + pgvector
+│   │   ├── cache/                  # Redis
+│   │   └── llm/                    # LLM client
+│   └── middleware/                 # Auth, CORS, logging
+├── migrations/                     # SQL migrations
+├── docs/
+│   └── openapi.yaml               # OpenAPI 3.0 spec
+├── go.mod
+├── go.sum
+├── Dockerfile
+└── README.md
 ```
 
-## 🧪 Testing
+## Database Schema
+
+### Products
+- Stores insurance products with pricing rules
+- Slugs for SEO-friendly URLs
+- Age factors for premium calculation
+- Category-based filtering (life, health, vehicle)
+
+### Applications
+- Policy application workflow
+- Status: draft → submitted → under_review → approved/rejected
+- JSONB fields for flexible applicant data
+- Underwriter notes and rejection reasons
+
+### Product Embeddings (pgvector)
+- Vector embeddings for semantic search
+- Enables AI-powered product recommendations
+- RAG (Retrieval Augmented Generation) for chatbot
+
+## AI Features
+
+### RAG Chatbot
+
+The chatbot uses **Retrieval Augmented Generation (RAG)** with pgvector:
+
+1. **Semantic Search**: User query → embedding → pgvector similarity search
+2. **Context Retrieval**: Top-k relevant products + chat history
+3. **LLM Generation**: Context + query → LLM → natural language response
+
+**Tech Stack:**
+- pgvector extension for embeddings storage
+- Cosine similarity for semantic search
+- LLM API for response generation
+- Redis for session management
+
+**Example Flow:**
+```
+User: "Asuransi untuk usia 40 tahun dengan budget 500rb/bulan?"
+  ↓
+Embedding → pgvector search
+  ↓
+Context: [Product A, Product B]
+  ↓
+LLM prompt: "Based on these products... recommend..."
+  ↓
+Response: "Saya merekomendasikan Asuransi Jiwa Premium..."
+```
+
+## Testing
 
 ```bash
-# Run tests
+# Run all tests
 go test ./...
 
-# With coverage
+# Run with coverage
 go test -cover ./...
+
+# Run specific package
+go test ./internal/usecase/...
 ```
 
-## 🐳 Docker
+## Production Deployment
 
-**Build image:**
+**Live API**: https://insurance-app-api.bayuanugerah.my.id
 
-```bash
-docker build -t insurance-api .
-```
+Deployed on Oracle Cloud ARM64 VM with:
+- Docker + NGINX reverse proxy
+- Let's Encrypt SSL certificates
+- PostgreSQL 16 + pgvector
+- Auto-restart on failure
 
-**Run container:**
+## Development Workflow
 
-```bash
-docker run -d \
-  -p 8080:8080 \
-  -e DATABASE_URL=postgres://user:pass@host:5432/db \
-  -e REDIS_URL=redis://host:6379/0 \
-  --name insurance-api \
-  insurance-api
-```
+1. Create feature branch: `git checkout -b feature/new-feature`
+2. Make changes with atomic commits (Angular convention)
+3. Push and create PR: `git push origin feature/new-feature`
+4. Code review (automated + manual)
+5. Merge to main
+6. Auto-deploy to production
 
-## 🏛️ Architecture
+## Contributing
 
-**Clean Architecture layers:**
+1. Fork repository
+2. Create feature branch
+3. Commit changes (atomic commits, Angular convention)
+4. Push to branch
+5. Create Pull Request
 
-1. **Domain Layer** (`internal/domain/`): Business entities
-   - Pure Go structs, no external dependencies
-   - Entities: User, Product, Application, Payment, ChatSession, Message
+## License
 
-2. **Use Case Layer** (`internal/usecase/`): Business logic
-   - Orchestrates data flow between repositories
-   - Implements business rules (premium calculation, RAG chatbot)
+MIT License - see LICENSE file for details
 
-3. **Repository Layer** (`internal/repository/`): Data access
-   - PostgreSQL queries via pgx driver
-   - pgvector similarity search
+## Contact
 
-4. **Delivery Layer** (`internal/delivery/http/`): HTTP handlers
-   - Fiber routes
-   - Request validation & response formatting
+**Bayu Anugerah**
+- Email: bayu.anugerah99@gmail.com
+- GitHub: [@IlucielI](https://github.com/IlucielI)
+- Portfolio: https://bayuanugerah.my.id
 
-## 🤖 AI Features
+## Acknowledgments
 
-### RAG Chatbot (Retrieval-Augmented Generation)
-
-**How it works:**
-
-1. User message → embedding (via LLM endpoint)
-2. pgvector searches similar past messages (cosine similarity)
-3. Top 3 similar messages retrieved as context
-4. Context + user message → LLM
-5. LLM response → stored with embedding
-
-**Fallback mode:**
-
-Jika LLM endpoint down, chatbot return static helpful responses:
-
-```go
-// internal/usecase/chat_usecase.go
-fallbackResponses := map[string]string{
-    "products": "Kami menyediakan 3 jenis asuransi: Jiwa, Kesehatan, dan Kendaraan.",
-    "premium": "Premi dihitung berdasarkan usia, uang pertanggungan, dan jenis produk.",
-    // ...
-}
-```
-
-## 🔧 Configuration
-
-**Environment variables:**
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `PORT` | Server port | `8080` |
-| `DATABASE_URL` | PostgreSQL connection string | `postgres://user:pass@localhost:5432/db` |
-| `REDIS_URL` | Redis connection string | `redis://localhost:6379/0` |
-| `SESSION_SECRET` | Session encryption key | `your-secret-key` |
-| `LLM_ENDPOINT` | OpenAI-compatible API endpoint | `http://localhost:11434/v1` |
-| `CORS_ORIGINS` | Allowed origins (comma-separated) | `http://localhost:3000` |
-
-## 📊 Database Schema
-
-**Key tables:**
-
-- `users`: User accounts (email, password_hash, role)
-- `products`: Insurance products (name, category, base_premium, embedding)
-- `applications`: Policy applications (applicant data, status, premium_amount)
-- `chat_sessions`: Chat sessions per user
-- `messages`: Chat messages with embeddings (vector similarity search)
-
-**pgvector indexes:**
-
-```sql
-CREATE INDEX ON products USING ivfflat (embedding vector_cosine_ops);
-CREATE INDEX ON messages USING ivfflat (embedding vector_cosine_ops);
-```
-
-## 🚨 Troubleshooting
-
-**Problem: CORS errors**
-
-Solution: Check `CORS_ORIGINS` env var matches frontend URL
-
-**Problem: Database connection failed**
-
-Solution: Verify PostgreSQL running and credentials correct
-
-**Problem: pgvector extension not found**
-
-Solution: Install pgvector:
-
-```bash
-# Ubuntu/Debian
-sudo apt install postgresql-16-pgvector
-
-# Or compile from source
-git clone https://github.com/pgvector/pgvector.git
-cd pgvector
-make
-sudo make install
-```
-
-**Problem: LLM endpoint timeout**
-
-Solution: App works with fallback responses. LLM optional for demo.
-
-## 📝 Development Workflow
-
-1. Create feature branch: `git checkout -b feat/feature-name`
-2. Make changes, test locally
-3. Commit (atomic): `git commit -m "feat(scope): description"`
-4. Push: `git push -u origin feat/feature-name`
-5. Create PR, wait for code review
-6. Merge after approval
-
-## 📄 License
-
-MIT License - Bayu Anugerah
-
-## 🔗 Related Repositories
-
-- Frontend App: https://github.com/IlucielI/insurance-policy-app
-- Admin CMS: https://github.com/IlucielI/insurance-policy-cms
-
-## 📧 Contact
-
-**Bayu Anugerah**  
-Email: bayu.anugerah99@gmail.com  
-GitHub: https://github.com/IlucielI
+Built as part of technical assessment for PT Logika Sarana Teknologi (Logique).

@@ -1,0 +1,731 @@
+openapi: 3.0.3
+info:
+  title: Insurance Policy API
+  description: |
+    RESTful API for Insurance Policy Management System
+    
+    ## Features
+    - Product management (CRUD)
+    - Application workflow (Draft → Submitted → Under Review → Approved/Rejected)
+    - Premium calculation
+    - AI-powered RAG chatbot with semantic search
+    
+    ## Authentication
+    JWT-based authentication for admin endpoints.
+  version: 1.0.0
+  contact:
+    name: Bayu Anugerah
+    email: bayu.anugerah99@gmail.com
+
+servers:
+  - url: https://insurance-app-api.bayuanugerah.my.id/api/v1
+    description: Production server
+  - url: http://localhost:8080/api/v1
+    description: Local development server
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Products
+    description: Insurance product management
+  - name: Applications
+    description: Policy application workflow
+  - name: Chat
+    description: AI-powered RAG chatbot
+  - name: Auth
+    description: Authentication endpoints
+
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Check API health status
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service:
+                    type: string
+                    example: insurance-policy-api
+                  status:
+                    type: string
+                    example: ok
+
+  /products:
+    get:
+      tags:
+        - Products
+      summary: List all products
+      description: Get paginated list of insurance products
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [life, health, vehicle]
+          description: Filter by product category
+        - name: slug
+          in: query
+          schema:
+            type: string
+          description: Filter by product slug
+        - name: is_active
+          in: query
+          schema:
+            type: boolean
+          description: Filter by active status
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: List of products
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Product'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+    post:
+      tags:
+        - Products
+      summary: Create new product
+      description: Create a new insurance product (Admin only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductInput'
+      responses:
+        '201':
+          description: Product created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Product'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /products/{slug}:
+    get:
+      tags:
+        - Products
+      summary: Get product by slug
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+          example: asuransi-jiwa-premium
+      responses:
+        '200':
+          description: Product details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Products
+      summary: Update product
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductInput'
+      responses:
+        '200':
+          description: Product updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Products
+      summary: Delete product
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Product deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /products/{slug}/calculate:
+    post:
+      tags:
+        - Products
+      summary: Calculate premium
+      description: Calculate insurance premium based on age, sum assured, and payment term
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - age
+                - sum_assured
+                - payment_term
+              properties:
+                age:
+                  type: integer
+                  minimum: 18
+                  maximum: 70
+                  example: 35
+                sum_assured:
+                  type: integer
+                  minimum: 50000000
+                  maximum: 5000000000
+                  example: 500000000
+                  description: Coverage amount in IDR
+                payment_term:
+                  type: integer
+                  minimum: 12
+                  maximum: 240
+                  example: 120
+                  description: Payment term in months
+      responses:
+        '200':
+          description: Premium calculation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PremiumCalculation'
+
+  /applications:
+    get:
+      tags:
+        - Applications
+      summary: List applications
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, submitted, under_review, approved, rejected]
+        - name: product_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of applications
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Application'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+    post:
+      tags:
+        - Applications
+      summary: Create application
+      description: Submit a new policy application
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationInput'
+      responses:
+        '201':
+          description: Application created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Application'
+
+  /applications/{id}:
+    get:
+      tags:
+        - Applications
+      summary: Get application
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Application details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Application'
+
+    patch:
+      tags:
+        - Applications
+      summary: Update application status
+      description: Move application through workflow (Admin/Underwriter only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [submitted, under_review, approved, rejected]
+                underwriter_notes:
+                  type: string
+                rejection_reason:
+                  type: string
+      responses:
+        '200':
+          description: Application updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Application'
+
+  /chat:
+    post:
+      tags:
+        - Chat
+      summary: Chat with AI assistant
+      description: |
+        AI-powered RAG chatbot with semantic search over products and chat history.
+        Uses pgvector for embeddings and LLM for response generation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message
+                - session_id
+              properties:
+                message:
+                  type: string
+                  example: Apa produk asuransi jiwa yang tersedia?
+                session_id:
+                  type: string
+                  format: uuid
+                  example: 550e8400-e29b-41d4-a716-446655440000
+      responses:
+        '200':
+          description: AI response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      response:
+                        type: string
+                        example: Kami memiliki 3 produk asuransi jiwa...
+                      session_id:
+                        type: string
+                      retrieved_products:
+                        type: array
+                        items:
+                          type: object
+
+  /auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Admin login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: admin@insurance.com
+                password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      token:
+                        type: string
+                      user:
+                        $ref: '#/components/schemas/User'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Asuransi Jiwa Premium
+        slug:
+          type: string
+          example: asuransi-jiwa-premium
+        category:
+          type: string
+          enum: [life, health, vehicle]
+        description:
+          type: string
+        coverage_details:
+          type: object
+          properties:
+            features:
+              type: array
+              items:
+                type: string
+        min_sum_assured:
+          type: integer
+          example: 100000000
+        max_sum_assured:
+          type: integer
+          example: 2000000000
+        min_payment_term:
+          type: integer
+          example: 12
+        max_payment_term:
+          type: integer
+          example: 240
+        base_premium_rate:
+          type: number
+          format: float
+          example: 0.0055
+        age_factor:
+          type: object
+          additionalProperties:
+            type: number
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ProductInput:
+      type: object
+      required:
+        - name
+        - slug
+        - category
+        - min_sum_assured
+        - max_sum_assured
+        - base_premium_rate
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        category:
+          type: string
+          enum: [life, health, vehicle]
+        description:
+          type: string
+        coverage_details:
+          type: object
+        min_sum_assured:
+          type: integer
+        max_sum_assured:
+          type: integer
+        min_payment_term:
+          type: integer
+        max_payment_term:
+          type: integer
+        base_premium_rate:
+          type: number
+        age_factor:
+          type: object
+        is_active:
+          type: boolean
+
+    Application:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        product_id:
+          type: string
+          format: uuid
+        applicant_data:
+          type: object
+          properties:
+            name:
+              type: string
+            email:
+              type: string
+            phone:
+              type: string
+            dob:
+              type: string
+              format: date
+            address:
+              type: string
+            occupation:
+              type: string
+        sum_assured:
+          type: integer
+        payment_term:
+          type: integer
+        premium_amount:
+          type: integer
+        status:
+          type: string
+          enum: [draft, submitted, under_review, approved, rejected]
+        underwriter_id:
+          type: string
+          format: uuid
+        underwriter_notes:
+          type: string
+        rejection_reason:
+          type: string
+        health_questions:
+          type: object
+        submitted_at:
+          type: string
+          format: date-time
+        reviewed_at:
+          type: string
+          format: date-time
+        approved_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ApplicationInput:
+      type: object
+      required:
+        - product_id
+        - applicant_data
+        - sum_assured
+        - payment_term
+        - premium_amount
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        applicant_data:
+          type: object
+        sum_assured:
+          type: integer
+        payment_term:
+          type: integer
+        premium_amount:
+          type: integer
+        health_questions:
+          type: object
+
+    PremiumCalculation:
+      type: object
+      properties:
+        base_premium:
+          type: integer
+          example: 27500000
+        age_factor:
+          type: number
+          example: 1.2
+        coverage_factor:
+          type: number
+          example: 1.0
+        total_premium:
+          type: integer
+          example: 33000000
+          description: Monthly premium in IDR
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        full_name:
+          type: string
+        role:
+          type: string
+          enum: [customer, admin, underwriter]
+        is_verified:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Not Found
+            message: Resource not found
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Unauthorized
+            message: Invalid or missing authentication token

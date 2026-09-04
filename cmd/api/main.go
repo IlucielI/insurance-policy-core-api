@@ -53,9 +53,7 @@ func main() {
 	productHandler := http.NewProductHandler(productUsecase)
 	authHandler := http.NewAuthHandler(authUsecase)
 	chatHandler := http.NewChatHandler(chatUsecase)
-	
-	// TODO: Initialize application handler
-	_ = applicationUsecase // Will be used when handler is implemented
+	aiHandler := http.NewAIHandler(applicationUsecase, llmService)
 
 	// Fiber app
 	app := fiber.New(fiber.Config{
@@ -122,6 +120,9 @@ func main() {
 	admin.Patch("/applications/:id/status", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"message": "Update application status endpoint"})
 	})
+	
+	// AI routes
+	admin.Post("/ai-review/:id", aiHandler.ReviewApplication)
 
 	// Start server
 	port := os.Getenv("PORT")

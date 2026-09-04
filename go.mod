@@ -1,6 +1,6 @@
 module github.com/IlucielI/insurance-policy-core-api
 
-go 1.26.0
+go 1.23
 
 require (
 	github.com/andybalholm/brotli v1.1.0 // indirect

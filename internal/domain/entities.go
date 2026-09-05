@@ -101,3 +101,114 @@ type ActivityLog struct {
 	Metadata   map[string]interface{} `json:"metadata,omitempty"`
 	CreatedAt  time.Time              `json:"created_at"`
 }
+
+type Policy struct {
+	ID                   string    `json:"id"`
+	PolicyNumber         string    `json:"policy_number"`
+	ApplicationID        string    `json:"application_id"`
+	UserID               string    `json:"user_id"`
+	ProductID            string    `json:"product_id"`
+	SumAssured           int64     `json:"sum_assured"`
+	PremiumAmount        int64     `json:"premium_amount"`
+	PaymentFrequency     string    `json:"payment_frequency"` // monthly, quarterly, annually
+	Status               string    `json:"status"`            // active, lapsed, surrendered, expired
+	IssueDate            string    `json:"issue_date"`        // DATE format
+	ExpiryDate           string    `json:"expiry_date"`
+	LastPremiumPaidDate  *string   `json:"last_premium_paid_date,omitempty"`
+	NextPremiumDueDate   *string   `json:"next_premium_due_date,omitempty"`
+	CreatedAt            time.Time `json:"created_at"`
+	UpdatedAt            time.Time `json:"updated_at"`
+	Product              *Product  `json:"product,omitempty"`
+}
+
+type Claim struct {
+	ID                  string     `json:"id"`
+	ClaimNumber         string     `json:"claim_number"`
+	PolicyID            string     `json:"policy_id"`
+	UserID              string     `json:"user_id"`
+	ClaimType           string     `json:"claim_type"` // death, maturity, health, accident, vehicle_damage
+	ClaimAmount         int64      `json:"claim_amount"`
+	IncidentDate        string     `json:"incident_date"` // DATE format
+	IncidentDescription string     `json:"incident_description"`
+	Status              string     `json:"status"` // submitted, under_review, approved, rejected, paid
+	ReviewerID          *string    `json:"reviewer_id,omitempty"`
+	ReviewerNotes       string     `json:"reviewer_notes,omitempty"`
+	RejectionReason     string     `json:"rejection_reason,omitempty"`
+	ApprovedAmount      *int64     `json:"approved_amount,omitempty"`
+	SubmittedAt         time.Time  `json:"submitted_at"`
+	ReviewedAt          *time.Time `json:"reviewed_at,omitempty"`
+	ApprovedAt          *time.Time `json:"approved_at,omitempty"`
+	PaidAt              *time.Time `json:"paid_at,omitempty"`
+	CreatedAt           time.Time  `json:"created_at"`
+	UpdatedAt           time.Time  `json:"updated_at"`
+	Policy              *Policy    `json:"policy,omitempty"`
+}
+
+type ClaimDocument struct {
+	ID           string    `json:"id"`
+	ClaimID      string    `json:"claim_id"`
+	DocumentType string    `json:"document_type"` // medical_report, police_report, invoice, photo, other
+	FileName     string    `json:"file_name"`
+	FilePath     string    `json:"file_path"`
+	FileSize     int64     `json:"file_size"`
+	MimeType     string    `json:"mime_type"`
+	UploadedAt   time.Time `json:"uploaded_at"`
+}
+
+type ClaimTimeline struct {
+	ID          string                 `json:"id"`
+	ClaimID     string                 `json:"claim_id"`
+	Action      string                 `json:"action"` // submitted, document_uploaded, status_changed, comment_added
+	Description string                 `json:"description"`
+	ActorID     *string                `json:"actor_id,omitempty"`
+	ActorName   string                 `json:"actor_name,omitempty"`
+	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+	CreatedAt   time.Time              `json:"created_at"`
+}
+
+type Invoice struct {
+	ID               string     `json:"id"`
+	InvoiceNumber    string     `json:"invoice_number"`
+	PolicyID         string     `json:"policy_id"`
+	UserID           string     `json:"user_id"`
+	Amount           int64      `json:"amount"`
+	DueDate          string     `json:"due_date"` // DATE format
+	Status           string     `json:"status"`   // pending, paid, overdue, cancelled
+	PaidAmount       int64      `json:"paid_amount"`
+	PaidAt           *time.Time `json:"paid_at,omitempty"`
+	PaymentMethod    string     `json:"payment_method,omitempty"`
+	PaymentReference string     `json:"payment_reference,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+	Policy           *Policy    `json:"policy,omitempty"`
+}
+
+type Document struct {
+	ID           string    `json:"id"`
+	PolicyID     *string   `json:"policy_id,omitempty"`
+	UserID       string    `json:"user_id"`
+	DocumentType string    `json:"document_type"` // policy_certificate, endorsement, receipt, notice, other
+	Title        string    `json:"title"`
+	Description  string    `json:"description,omitempty"`
+	FileName     string    `json:"file_name"`
+	FilePath     string    `json:"file_path"`
+	FileSize     int64     `json:"file_size"`
+	MimeType     string    `json:"mime_type"`
+	UploadedAt   time.Time `json:"uploaded_at"`
+}
+
+type PolicyEndorsement struct {
+	ID               string                 `json:"id"`
+	EndorsementNumber string                 `json:"endorsement_number"`
+	PolicyID         string                 `json:"policy_id"`
+	EndorsementType  string                 `json:"endorsement_type"` // coverage_change, beneficiary_change, premium_adjustment
+	Description      string                 `json:"description"`
+	EffectiveDate    string                 `json:"effective_date"` // DATE format
+	OldValues        map[string]interface{} `json:"old_values,omitempty"`
+	NewValues        map[string]interface{} `json:"new_values,omitempty"`
+	Status           string                 `json:"status"` // pending, approved, rejected
+	ApprovedBy       *string                `json:"approved_by,omitempty"`
+	ApprovedAt       *time.Time             `json:"approved_at,omitempty"`
+	CreatedAt        time.Time              `json:"created_at"`
+	UpdatedAt        time.Time              `json:"updated_at"`
+}

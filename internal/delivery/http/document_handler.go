@@ -43,6 +43,68 @@ func (h *DocumentHandler) ListDocuments(c *fiber.Ctx) error {
 	})
 }
 
+// POST /documents/upload
+func (h *DocumentHandler) UploadDocument(c *fiber.Ctx) error {
+	// Get userID from JWT context
+	userID := c.Locals("userID")
+	if userID == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "unauthorized",
+		})
+	}
+
+	// Parse multipart form
+	file, err := c.FormFile("file")
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "file is required",
+		})
+	}
+
+	// Get form fields
+	documentType := c.FormValue("document_type")
+	title := c.FormValue("title")
+	description := c.FormValue("description")
+	policyIDStr := c.FormValue("policy_id")
+
+	if documentType == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "document_type is required",
+		})
+	}
+	if title == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "title is required",
+		})
+	}
+
+	var policyID *string
+	if policyIDStr != "" {
+		policyID = &policyIDStr
+	}
+
+	// Upload document
+	doc, err := h.documentUsecase.UploadDocument(
+		c.Context(),
+		userID.(string),
+		file,
+		documentType,
+		title,
+		description,
+		policyID,
+	)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+		"message": "Document uploaded successfully",
+		"data":    doc,
+	})
+}
+
 // GET /documents/:id/download
 func (h *DocumentHandler) DownloadDocument(c *fiber.Ctx) error {
 	id := c.Params("id")
@@ -54,16 +116,37 @@ func (h *DocumentHandler) DownloadDocument(c *fiber.Ctx) error {
 		})
 	}
 
-	// Return document metadata and download URL
-	// In production, you'd generate a signed URL or serve the file
+	// Generate presigned download URL
+	downloadURL, err := h.documentUsecase.GetDocumentDownloadURL(c.Context(), id)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
 	return c.JSON(fiber.Map{
-		"id":            document.ID,
-		"file_name":     document.FileName,
-		"file_path":     document.FilePath,
-		"file_size":     document.FileSize,
-		"mime_type":     document.MimeType,
-		"download_url":  "/files/" + document.FilePath, // Placeholder
-		"document_type": document.DocumentType,
-		"title":         document.Title,
+		"id":           document.ID,
+		"file_name":    document.FileName,
+		"file_size":    document.FileSize,
+		"mime_type":    document.MimeType,
+		"download_url": downloadURL,
+		"title":        document.Title,
+		"uploaded_at":  document.UploadedAt,
+	})
+}
+
+// DELETE /documents/:id
+func (h *DocumentHandler) DeleteDocument(c *fiber.Ctx) error {
+	id := c.Params("id")
+
+	err := h.documentUsecase.DeleteDocument(c.Context(), id)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Document deleted successfully",
 	})
 }

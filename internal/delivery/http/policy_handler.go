@@ -25,10 +25,28 @@ func (h *PolicyHandler) ListPolicies(c *fiber.Ctx) error {
 		})
 	}
 
+	// Pagination
 	limit, _ := strconv.Atoi(c.Query("limit", "10"))
 	offset, _ := strconv.Atoi(c.Query("offset", "0"))
+	
+	// Search & filters
+	search := c.Query("search", "")
+	status := c.Query("status", "")
+	product := c.Query("product", "")
+	dateFrom := c.Query("date_from", "")
+	dateTo := c.Query("date_to", "")
 
-	policies, total, err := h.policyUsecase.GetUserPolicies(c.Context(), userID.(string), limit, offset)
+	policies, total, err := h.policyUsecase.GetUserPoliciesWithFilters(
+		c.Context(),
+		userID.(string),
+		search,
+		status,
+		product,
+		dateFrom,
+		dateTo,
+		limit,
+		offset,
+	)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),

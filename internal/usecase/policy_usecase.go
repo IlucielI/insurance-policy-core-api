@@ -11,6 +11,7 @@ import (
 
 type PolicyRepositoryInterface interface {
 	GetByUserID(ctx context.Context, userID string, limit, offset int) ([]*domain.Policy, int, error)
+	GetByUserIDWithFilters(ctx context.Context, userID, search, status, product, dateFrom, dateTo string, limit, offset int) ([]*domain.Policy, int, error)
 	GetByID(ctx context.Context, id string) (*domain.Policy, error)
 	CreateEndorsement(ctx context.Context, endorsement *domain.PolicyEndorsement) error
 	Update(ctx context.Context, policy *domain.Policy) error
@@ -30,6 +31,23 @@ func NewPolicyUsecase(policyRepo PolicyRepositoryInterface, productRepo ProductR
 
 func (u *PolicyUsecase) GetUserPolicies(ctx context.Context, userID string, limit, offset int) ([]*domain.Policy, int, error) {
 	policies, total, err := u.policyRepo.GetByUserID(ctx, userID, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Enrich with product details
+	for _, policy := range policies {
+		product, err := u.productRepo.GetByID(ctx, policy.ProductID)
+		if err == nil && product != nil {
+			policy.Product = product
+		}
+	}
+
+	return policies, total, nil
+}
+
+func (u *PolicyUsecase) GetUserPoliciesWithFilters(ctx context.Context, userID, search, status, product, dateFrom, dateTo string, limit, offset int) ([]*domain.Policy, int, error) {
+	policies, total, err := u.policyRepo.GetByUserIDWithFilters(ctx, userID, search, status, product, dateFrom, dateTo, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}

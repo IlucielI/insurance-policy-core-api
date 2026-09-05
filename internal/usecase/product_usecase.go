@@ -15,14 +15,25 @@ type ProductRepository interface {
 	List(ctx context.Context, filters map[string]interface{}, limit, offset int) ([]*domain.Product, int, error)
 	Update(ctx context.Context, product *domain.Product) error
 	Delete(ctx context.Context, id string) error
+	SemanticSearch(ctx context.Context, queryEmbedding []float32, limit int) ([]*domain.Product, error)
+	GetAllProducts(ctx context.Context) ([]*domain.Product, error)
+	SaveEmbedding(ctx context.Context, productID, chunkType, chunkText string, embedding []float32) error
+}
+
+type EmbeddingsService interface {
+	GenerateEmbedding(ctx context.Context, text string) ([]float32, error)
 }
 
 type ProductUsecase struct {
-	productRepo ProductRepository
+	productRepo       ProductRepository
+	embeddingsService EmbeddingsService
 }
 
-func NewProductUsecase(productRepo ProductRepository) *ProductUsecase {
-	return &ProductUsecase{productRepo: productRepo}
+func NewProductUsecase(productRepo ProductRepository, embeddingsService EmbeddingsService) *ProductUsecase {
+	return &ProductUsecase{
+		productRepo:       productRepo,
+		embeddingsService: embeddingsService,
+	}
 }
 
 func (u *ProductUsecase) CreateProduct(ctx context.Context, product *domain.Product) error {
@@ -144,4 +155,63 @@ func (u *ProductUsecase) CalculatePremium(ctx context.Context, productID string,
 
 	// Round to nearest 1000
 	return int64(finalPremium/1000) * 1000, nil
+}
+
+// SemanticSearchProducts performs semantic search on products
+func (u *ProductUsecase) SemanticSearchProducts(ctx context.Context, query string, limit int) ([]*domain.Product, error) {
+	if query == "" {
+		return nil, errors.New("search query is required")
+	}
+
+	if u.embeddingsService == nil {
+		return nil, errors.New("embeddings service not available")
+	}
+
+	// Generate embedding for search query
+	queryEmbedding, err := u.embeddingsService.GenerateEmbedding(ctx, query)
+	if err != nil {
+		return nil, errors.New("failed to generate query embedding: " + err.Error())
+	}
+
+	// Perform semantic search
+	products, err := u.productRepo.SemanticSearch(ctx, queryEmbedding, limit)
+	if err != nil {
+		return nil, errors.New("semantic search failed: " + err.Error())
+	}
+
+	return products, nil
+}
+
+// GenerateProductEmbeddings generates embeddings for all products
+func (u *ProductUsecase) GenerateProductEmbeddings(ctx context.Context) error {
+	if u.embeddingsService == nil {
+		return errors.New("embeddings service not available")
+	}
+
+	products, err := u.productRepo.GetAllProducts(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, product := range products {
+		// Create searchable text from product data
+		searchText := product.Name + ". " + product.Description
+		if product.Category != "" {
+			searchText = "Kategori: " + product.Category + ". " + searchText
+		}
+
+		// Generate embedding
+		embedding, err := u.embeddingsService.GenerateEmbedding(ctx, searchText)
+		if err != nil {
+			return errors.New("failed to generate embedding for product " + product.Name + ": " + err.Error())
+		}
+
+		// Save embedding
+		err = u.productRepo.SaveEmbedding(ctx, product.ID, "description", searchText, embedding)
+		if err != nil {
+			return errors.New("failed to save embedding for product " + product.Name + ": " + err.Error())
+		}
+	}
+
+	return nil
 }

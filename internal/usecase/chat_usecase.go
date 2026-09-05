@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -20,6 +21,11 @@ type ChatRepository interface {
 type LLMService interface {
 	GenerateEmbedding(ctx context.Context, text string) ([]float32, error)
 	GenerateCompletion(ctx context.Context, messages []map[string]string) (string, error)
+}
+
+type StreamingLLMService interface {
+	LLMService
+	StreamCompletion(ctx context.Context, messages []map[string]string, writer io.Writer) error
 }
 
 type ChatUsecase struct {
@@ -167,6 +173,131 @@ func (u *ChatUsecase) GetChatHistory(ctx context.Context, sessionID string, limi
 	}
 
 	return u.chatRepo.GetMessagesBySessionID(ctx, session.ID, limit)
+}
+
+// SendMessageStream handles streaming chat response
+func (u *ChatUsecase) SendMessageStream(ctx context.Context, sessionID, userMessage string, userID *string, writer io.Writer) error {
+	// Get or create session
+	session, err := u.GetOrCreateSession(ctx, sessionID, userID)
+	if err != nil {
+		return err
+	}
+
+	// Save user message
+	userMsg := &domain.ChatMessage{
+		ChatSessionID: session.ID,
+		Role:          "user",
+		Content:       userMessage,
+		CreatedAt:     time.Now(),
+	}
+	if err := u.chatRepo.CreateMessage(ctx, userMsg); err != nil {
+		return err
+	}
+
+	// Check if LLM supports streaming
+	streamingService, supportsStreaming := u.llmService.(StreamingLLMService)
+	if !supportsStreaming || u.llmService == nil {
+		// Fallback to non-streaming
+		reply := u.generateFallbackResponse(userMessage)
+		fmt.Fprintf(writer, "data: %s\n\n", reply)
+		
+		// Save assistant message
+		assistantMsg := &domain.ChatMessage{
+			ChatSessionID: session.ID,
+			Role:          "assistant",
+			Content:       reply,
+			CreatedAt:     time.Now(),
+		}
+		return u.chatRepo.CreateMessage(ctx, assistantMsg)
+	}
+
+	// RAG: Generate embedding and retrieve context
+	var contextDocs []map[string]interface{}
+	var relevantContext string
+
+	embedding, err := u.llmService.GenerateEmbedding(ctx, userMessage)
+	if err == nil {
+		embeddings, err := u.chatRepo.SearchProductEmbeddings(ctx, embedding, 3)
+		if err == nil && len(embeddings) > 0 {
+			contextParts := []string{}
+			for _, emb := range embeddings {
+				contextParts = append(contextParts, emb.ChunkText)
+				contextDocs = append(contextDocs, map[string]interface{}{
+					"product_id": emb.ProductID,
+					"chunk_type": emb.ChunkType,
+					"text":       emb.ChunkText,
+				})
+			}
+			relevantContext = strings.Join(contextParts, "\n\n")
+		}
+	}
+
+	// Get recent chat history
+	recentMessages, _ := u.chatRepo.GetMessagesBySessionID(ctx, session.ID, 5)
+
+	// Build LLM prompt
+	llmMessages := []map[string]string{}
+	systemPrompt := `Anda adalah asisten AI untuk sistem asuransi. Jawab pertanyaan customer dengan ramah dan jelas dalam Bahasa Indonesia.
+
+Gunakan informasi produk asuransi berikut jika relevan:
+`
+	if relevantContext != "" {
+		systemPrompt += "\n" + relevantContext + "\n"
+	}
+	systemPrompt += "\nJika pertanyaan di luar konteks asuransi, arahkan customer ke customer service."
+
+	llmMessages = append(llmMessages, map[string]string{
+		"role":    "system",
+		"content": systemPrompt,
+	})
+
+	// Add recent history
+	for _, msg := range recentMessages {
+		llmMessages = append(llmMessages, map[string]string{
+			"role":    msg.Role,
+			"content": msg.Content,
+		})
+	}
+
+	// Add current user message
+	llmMessages = append(llmMessages, map[string]string{
+		"role":    "user",
+		"content": userMessage,
+	})
+
+	// Capture streaming response
+	fullResponse := ""
+	captureWriter := &responseCapture{
+		writer:   writer,
+		captured: &fullResponse,
+	}
+
+	// Stream completion
+	err = streamingService.StreamCompletion(ctx, llmMessages, captureWriter)
+	if err != nil {
+		return err
+	}
+
+	// Save assistant message
+	assistantMsg := &domain.ChatMessage{
+		ChatSessionID: session.ID,
+		Role:          "assistant",
+		Content:       fullResponse,
+		ContextDocs:   contextDocs,
+		CreatedAt:     time.Now(),
+	}
+	return u.chatRepo.CreateMessage(ctx, assistantMsg)
+}
+
+// responseCapture captures streaming response while forwarding to client
+type responseCapture struct {
+	writer   io.Writer
+	captured *string
+}
+
+func (r *responseCapture) Write(p []byte) (int, error) {
+	*r.captured += string(p)
+	return r.writer.Write(p)
 }
 
 // Fallback response when LLM is not available

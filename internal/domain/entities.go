@@ -33,23 +33,28 @@ type Product struct {
 }
 
 type Application struct {
-	ID                string                 `json:"id"`
-	UserID            string                 `json:"user_id"`
-	ProductID         string                 `json:"product_id"`
-	ApplicantData     map[string]interface{} `json:"applicant_data"`
-	SumAssured        int64                  `json:"sum_assured"`
-	PaymentTerm       int                    `json:"payment_term"` // months
-	PremiumAmount     int64                  `json:"premium_amount"`
-	HealthQuestions   map[string]interface{} `json:"health_questions,omitempty"`
-	Status            string                 `json:"status"` // draft, submitted, under_review, approved, rejected
-	UnderwriterID     *string                `json:"underwriter_id,omitempty"`
-	UnderwriterNotes  string                 `json:"underwriter_notes,omitempty"`
-	RejectionReason   string                 `json:"rejection_reason,omitempty"`
-	SubmittedAt       *time.Time             `json:"submitted_at,omitempty"`
-	ReviewedAt        *time.Time             `json:"reviewed_at,omitempty"`
-	ApprovedAt        *time.Time             `json:"approved_at,omitempty"`
-	CreatedAt         time.Time              `json:"created_at"`
-	UpdatedAt         time.Time              `json:"updated_at"`
+	ID                 string                 `json:"id"`
+	UserID             string                 `json:"user_id"`
+	ProductID          string                 `json:"product_id"`
+	ApplicantData      map[string]interface{} `json:"applicant_data"`
+	SumAssured         int64                  `json:"sum_assured"`
+	PaymentTerm        int                    `json:"payment_term"` // months
+	PremiumAmount      int64                  `json:"premium_amount"`
+	HealthQuestions    map[string]interface{} `json:"health_questions,omitempty"`
+	Status             string                 `json:"status"` // draft, submitted, under_review, approved, rejected
+	UnderwriterID      *string                `json:"underwriter_id,omitempty"`
+	UnderwriterNotes   string                 `json:"underwriter_notes,omitempty"`
+	RejectionReason    string                 `json:"rejection_reason,omitempty"`
+	RiskScore          *int                   `json:"risk_score,omitempty"`          // 0-100 fraud risk score
+	RiskLevel          string                 `json:"risk_level,omitempty"`          // low, medium, high
+	FraudFlags         []string               `json:"fraud_flags,omitempty"`         // detected suspicious patterns
+	RiskAnalysisDetail string                 `json:"risk_analysis_detail,omitempty"` // AI analysis explanation
+	RiskAnalyzedAt     *time.Time             `json:"risk_analyzed_at,omitempty"`
+	SubmittedAt        *time.Time             `json:"submitted_at,omitempty"`
+	ReviewedAt         *time.Time             `json:"reviewed_at,omitempty"`
+	ApprovedAt         *time.Time             `json:"approved_at,omitempty"`
+	CreatedAt          time.Time              `json:"created_at"`
+	UpdatedAt          time.Time              `json:"updated_at"`
 }
 
 type Payment struct {
@@ -126,7 +131,7 @@ type Claim struct {
 	ClaimNumber         string     `json:"claim_number"`
 	PolicyID            string     `json:"policy_id"`
 	UserID              string     `json:"user_id"`
-	ClaimType           string     `json:"claim_type"` // death, maturity, health, accident, vehicle_damage
+	ClaimType           string     `json:"claim_type"`
 	ClaimAmount         int64      `json:"claim_amount"`
 	IncidentDate        string     `json:"incident_date"` // DATE format
 	IncidentDescription string     `json:"incident_description"`
@@ -171,8 +176,10 @@ type Invoice struct {
 	InvoiceNumber    string     `json:"invoice_number"`
 	PolicyID         string     `json:"policy_id"`
 	UserID           string     `json:"user_id"`
+	InvoiceType      string     `json:"invoice_type"` // premium, admin_fee, penalty, etc.
 	Amount           int64      `json:"amount"`
 	DueDate          string     `json:"due_date"` // DATE format
+	Description      string     `json:"description,omitempty"`
 	Status           string     `json:"status"`   // pending, paid, overdue, cancelled
 	PaidAmount       int64      `json:"paid_amount"`
 	PaidAt           *time.Time `json:"paid_at,omitempty"`
@@ -211,4 +218,33 @@ type PolicyEndorsement struct {
 	ApprovedAt       *time.Time             `json:"approved_at,omitempty"`
 	CreatedAt        time.Time              `json:"created_at"`
 	UpdatedAt        time.Time              `json:"updated_at"`
+}
+
+type Role struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	DisplayName string    `json:"display_name"`
+	Description string    `json:"description"`
+	Permissions []string  `json:"permissions"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type UserRole struct {
+	ID         string    `json:"id"`
+	UserID     string    `json:"user_id"`
+	RoleID     string    `json:"role_id"`
+	AssignedBy *string   `json:"assigned_by,omitempty"`
+	AssignedAt time.Time `json:"assigned_at"`
+}
+
+type NotificationPreferences struct {
+	ID                        string    `json:"id"`
+	UserID                    string    `json:"user_id"`
+	PromotionalEmails         bool      `json:"promotional_emails"`
+	PolicyUpdateEmails        bool      `json:"policy_update_emails"`
+	ClaimNotificationEmails   bool      `json:"claim_notification_emails"`
+	NewsletterEmails          bool      `json:"newsletter_emails"`
+	CreatedAt                 time.Time `json:"created_at"`
+	UpdatedAt                 time.Time `json:"updated_at"`
 }

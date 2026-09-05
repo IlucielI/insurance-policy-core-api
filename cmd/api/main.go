@@ -39,11 +39,19 @@ func main() {
 	userRepo := repository.NewUserRepository(db)
 	applicationRepo := repository.NewApplicationRepository(db)
 	chatRepo := repository.NewChatRepository(db)
+	policyRepo := repository.NewPolicyRepository(db)
+	claimRepo := repository.NewClaimRepository(db)
+	billingRepo := repository.NewBillingRepository(db)
+	documentRepo := repository.NewDocumentRepository(db)
 
 	// Initialize usecases
 	productUsecase := usecase.NewProductUsecase(productRepo)
 	authUsecase := usecase.NewAuthUsecase(userRepo)
 	applicationUsecase := usecase.NewApplicationUsecase(applicationRepo, productRepo)
+	policyUsecase := usecase.NewPolicyUsecase(policyRepo, productRepo)
+	claimUsecase := usecase.NewClaimUsecase(claimRepo, policyRepo)
+	billingUsecase := usecase.NewBillingUsecase(billingRepo, policyRepo)
+	documentUsecase := usecase.NewDocumentUsecase(documentRepo)
 	
 	// Initialize LLM service (mock for now, will integrate real LLM later)
 	llmService := service.NewMockLLMService()
@@ -54,6 +62,10 @@ func main() {
 	authHandler := http.NewAuthHandler(authUsecase)
 	chatHandler := http.NewChatHandler(chatUsecase)
 	aiHandler := http.NewAIHandler(applicationUsecase, llmService)
+	policyHandler := http.NewPolicyHandler(policyUsecase)
+	claimHandler := http.NewClaimHandler(claimUsecase)
+	billingHandler := http.NewBillingHandler(billingUsecase)
+	documentHandler := http.NewDocumentHandler(documentUsecase)
 
 	// Fiber app
 	app := fiber.New(fiber.Config{
@@ -111,6 +123,31 @@ func main() {
 	// Chat routes
 	chat := api.Group("/chat")
 	chat.Post("/", chatHandler.SendMessage)
+
+	// Customer App - Policy Management routes
+	policies := api.Group("/policies")
+	policies.Get("/", policyHandler.ListPolicies)
+	policies.Get("/:id", policyHandler.GetPolicy)
+	policies.Post("/:id/endorse", policyHandler.EndorsePolicy)
+	policies.Post("/:id/renew", policyHandler.RenewPolicy)
+
+	// Customer App - Claims routes
+	claims := api.Group("/claims")
+	claims.Post("/", claimHandler.CreateClaim)
+	claims.Get("/:id", claimHandler.GetClaim)
+	claims.Put("/:id/documents", claimHandler.UploadDocument)
+	claims.Get("/:id/timeline", claimHandler.GetClaimTimeline)
+
+	// Customer App - Billing routes
+	billing := api.Group("/billing")
+	billing.Get("/invoices", billingHandler.GetInvoices)
+	billing.Post("/pay", billingHandler.PayInvoice)
+	billing.Get("/history", billingHandler.GetPaymentHistory)
+
+	// Customer App - Documents routes
+	documents := api.Group("/documents")
+	documents.Get("/", documentHandler.ListDocuments)
+	documents.Get("/:id/download", documentHandler.DownloadDocument)
 
 	// Admin routes (TODO: add auth middleware)
 	admin := api.Group("/admin")

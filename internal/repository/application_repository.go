@@ -44,14 +44,16 @@ func (r *ApplicationRepository) Create(ctx context.Context, app *domain.Applicat
 
 func (r *ApplicationRepository) GetByID(ctx context.Context, id string) (*domain.Application, error) {
 	app := &domain.Application{}
-	var applicantDataJSON, healthQuestionsJSON []byte
-	var underwriterID, underwriterNotes, rejectionReason sql.NullString
-	var submittedAt, reviewedAt, approvedAt sql.NullTime
+	var applicantDataJSON, healthQuestionsJSON, fraudFlagsJSON []byte
+	var underwriterID, underwriterNotes, rejectionReason, riskAnalysisDetail sql.NullString
+	var riskScore sql.NullInt64
+	var submittedAt, reviewedAt, approvedAt, riskAnalyzedAt sql.NullTime
 
 	query := `
 		SELECT id, user_id, product_id, applicant_data, sum_assured, payment_term, 
 			premium_amount, health_questions, status, underwriter_id, underwriter_notes, 
-			rejection_reason, submitted_at, reviewed_at, approved_at, created_at, updated_at
+			rejection_reason, risk_score, fraud_flags, risk_analysis_detail, risk_analyzed_at,
+			submitted_at, reviewed_at, approved_at, created_at, updated_at
 		FROM applications
 		WHERE id = $1
 	`
@@ -59,6 +61,7 @@ func (r *ApplicationRepository) GetByID(ctx context.Context, id string) (*domain
 		&app.ID, &app.UserID, &app.ProductID, &applicantDataJSON, &app.SumAssured,
 		&app.PaymentTerm, &app.PremiumAmount, &healthQuestionsJSON, &app.Status,
 		&underwriterID, &underwriterNotes, &rejectionReason,
+		&riskScore, &fraudFlagsJSON, &riskAnalysisDetail, &riskAnalyzedAt,
 		&submittedAt, &reviewedAt, &approvedAt, &app.CreatedAt, &app.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -70,6 +73,10 @@ func (r *ApplicationRepository) GetByID(ctx context.Context, id string) (*domain
 
 	json.Unmarshal(applicantDataJSON, &app.ApplicantData)
 	json.Unmarshal(healthQuestionsJSON, &app.HealthQuestions)
+	
+	if len(fraudFlagsJSON) > 0 {
+		json.Unmarshal(fraudFlagsJSON, &app.FraudFlags)
+	}
 
 	if underwriterID.Valid {
 		app.UnderwriterID = &underwriterID.String
@@ -79,6 +86,24 @@ func (r *ApplicationRepository) GetByID(ctx context.Context, id string) (*domain
 	}
 	if rejectionReason.Valid {
 		app.RejectionReason = rejectionReason.String
+	}
+	if riskScore.Valid {
+		score := int(riskScore.Int64)
+		app.RiskScore = &score
+		// Set risk level based on score
+		if score <= 30 {
+			app.RiskLevel = "low"
+		} else if score <= 60 {
+			app.RiskLevel = "medium"
+		} else {
+			app.RiskLevel = "high"
+		}
+	}
+	if riskAnalysisDetail.Valid {
+		app.RiskAnalysisDetail = riskAnalysisDetail.String
+	}
+	if riskAnalyzedAt.Valid {
+		app.RiskAnalyzedAt = &riskAnalyzedAt.Time
 	}
 	if submittedAt.Valid {
 		app.SubmittedAt = &submittedAt.Time
@@ -133,7 +158,8 @@ func (r *ApplicationRepository) List(ctx context.Context, filters map[string]int
 	query := fmt.Sprintf(`
 		SELECT id, user_id, product_id, applicant_data, sum_assured, payment_term, 
 			premium_amount, health_questions, status, underwriter_id, underwriter_notes, 
-			rejection_reason, submitted_at, reviewed_at, approved_at, created_at, updated_at
+			rejection_reason, risk_score, fraud_flags, risk_analysis_detail, risk_analyzed_at,
+			submitted_at, reviewed_at, approved_at, created_at, updated_at
 		FROM applications
 		%s
 		ORDER BY created_at DESC
@@ -151,14 +177,16 @@ func (r *ApplicationRepository) List(ctx context.Context, filters map[string]int
 	applications := []*domain.Application{}
 	for rows.Next() {
 		app := &domain.Application{}
-		var applicantDataJSON, healthQuestionsJSON []byte
-		var underwriterID, underwriterNotes, rejectionReason sql.NullString
-		var submittedAt, reviewedAt, approvedAt sql.NullTime
+		var applicantDataJSON, healthQuestionsJSON, fraudFlagsJSON []byte
+		var underwriterID, underwriterNotes, rejectionReason, riskAnalysisDetail sql.NullString
+		var riskScore sql.NullInt64
+		var submittedAt, reviewedAt, approvedAt, riskAnalyzedAt sql.NullTime
 
 		err := rows.Scan(
 			&app.ID, &app.UserID, &app.ProductID, &applicantDataJSON, &app.SumAssured,
 			&app.PaymentTerm, &app.PremiumAmount, &healthQuestionsJSON, &app.Status,
 			&underwriterID, &underwriterNotes, &rejectionReason,
+			&riskScore, &fraudFlagsJSON, &riskAnalysisDetail, &riskAnalyzedAt,
 			&submittedAt, &reviewedAt, &approvedAt, &app.CreatedAt, &app.UpdatedAt,
 		)
 		if err != nil {
@@ -167,6 +195,10 @@ func (r *ApplicationRepository) List(ctx context.Context, filters map[string]int
 
 		json.Unmarshal(applicantDataJSON, &app.ApplicantData)
 		json.Unmarshal(healthQuestionsJSON, &app.HealthQuestions)
+		
+		if len(fraudFlagsJSON) > 0 {
+			json.Unmarshal(fraudFlagsJSON, &app.FraudFlags)
+		}
 
 		if underwriterID.Valid {
 			app.UnderwriterID = &underwriterID.String
@@ -176,6 +208,23 @@ func (r *ApplicationRepository) List(ctx context.Context, filters map[string]int
 		}
 		if rejectionReason.Valid {
 			app.RejectionReason = rejectionReason.String
+		}
+		if riskScore.Valid {
+			score := int(riskScore.Int64)
+			app.RiskScore = &score
+			if score <= 30 {
+				app.RiskLevel = "low"
+			} else if score <= 60 {
+				app.RiskLevel = "medium"
+			} else {
+				app.RiskLevel = "high"
+			}
+		}
+		if riskAnalysisDetail.Valid {
+			app.RiskAnalysisDetail = riskAnalysisDetail.String
+		}
+		if riskAnalyzedAt.Valid {
+			app.RiskAnalyzedAt = &riskAnalyzedAt.Time
 		}
 		if submittedAt.Valid {
 			app.SubmittedAt = &submittedAt.Time
@@ -191,6 +240,168 @@ func (r *ApplicationRepository) List(ctx context.Context, filters map[string]int
 	}
 
 	return applications, total, nil
+}
+
+func (r *ApplicationRepository) ListWithFilters(ctx context.Context, search, userID, status, productID, priority, dateFrom, dateTo string, limit, offset int) ([]*domain.Application, int, error) {
+	whereClauses := []string{}
+	args := []interface{}{}
+	argPos := 1
+
+	// Text search: application_number, applicant_name (via applicant_data JSON), email
+	if search != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("(a.id ILIKE $%d OR a.user_id IN (SELECT id FROM users WHERE email ILIKE $%d OR full_name ILIKE $%d) OR applicant_data::text ILIKE $%d)", argPos, argPos+1, argPos+2, argPos+3))
+		searchPattern := "%" + search + "%"
+		args = append(args, searchPattern, searchPattern, searchPattern, searchPattern)
+		argPos += 4
+	}
+
+	if userID != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("a.user_id = $%d", argPos))
+		args = append(args, userID)
+		argPos++
+	}
+
+	if status != "" && status != "all" {
+		whereClauses = append(whereClauses, fmt.Sprintf("a.status = $%d", argPos))
+		args = append(args, status)
+		argPos++
+	}
+
+	if productID != "" && productID != "all" {
+		whereClauses = append(whereClauses, fmt.Sprintf("a.product_id = $%d", argPos))
+		args = append(args, productID)
+		argPos++
+	}
+
+	// Priority filter: map to status groups
+	if priority != "" && priority != "all" {
+		switch priority {
+		case "high":
+			whereClauses = append(whereClauses, fmt.Sprintf("a.status IN ($%d, $%d, $%d)", argPos, argPos+1, argPos+2))
+			args = append(args, "submitted", "under_review", "approved")
+			argPos += 3
+		case "medium":
+			whereClauses = append(whereClauses, fmt.Sprintf("a.status = $%d", argPos))
+			args = append(args, "draft")
+			argPos++
+		case "low":
+			whereClauses = append(whereClauses, fmt.Sprintf("a.status = $%d", argPos))
+			args = append(args, "rejected")
+			argPos++
+		}
+	}
+
+	// Date range filter
+	if dateFrom != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("a.created_at >= $%d", argPos))
+		args = append(args, dateFrom)
+		argPos++
+	}
+	if dateTo != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("a.created_at <= $%d", argPos))
+		args = append(args, dateTo)
+		argPos++
+	}
+
+	whereClause := ""
+	if len(whereClauses) > 0 {
+		whereClause = "WHERE " + strings.Join(whereClauses, " AND ")
+	}
+
+	// Count total
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM applications a %s", whereClause)
+	var total int
+	err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&total)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Fetch applications
+	query := fmt.Sprintf(`
+		SELECT a.id, a.user_id, a.product_id, a.applicant_data, a.sum_assured, a.payment_term,
+			a.premium_amount, a.health_questions, a.status, a.underwriter_id, a.underwriter_notes,
+			a.rejection_reason, a.risk_score, a.fraud_flags, a.risk_analysis_detail, a.risk_analyzed_at,
+			a.submitted_at, a.reviewed_at, a.approved_at, a.created_at, a.updated_at
+		FROM applications a
+		%s
+		ORDER BY a.created_at DESC
+		LIMIT $%d OFFSET $%d
+	`, whereClause, argPos, argPos+1)
+
+	args = append(args, limit, offset)
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	apps := []*domain.Application{}
+	for rows.Next() {
+		app := &domain.Application{}
+		var applicantDataJSON, healthQuestionsJSON, fraudFlagsJSON []byte
+		var underwriterID, underwriterNotes, rejectionReason, riskAnalysisDetail sql.NullString
+		var riskScore sql.NullInt64
+		var submittedAt, reviewedAt, approvedAt, riskAnalyzedAt sql.NullTime
+
+		err := rows.Scan(
+			&app.ID, &app.UserID, &app.ProductID, &applicantDataJSON, &app.SumAssured,
+			&app.PaymentTerm, &app.PremiumAmount, &healthQuestionsJSON, &app.Status,
+			&underwriterID, &underwriterNotes, &rejectionReason,
+			&riskScore, &fraudFlagsJSON, &riskAnalysisDetail, &riskAnalyzedAt,
+			&submittedAt, &reviewedAt, &approvedAt, &app.CreatedAt, &app.UpdatedAt,
+		)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		json.Unmarshal(applicantDataJSON, &app.ApplicantData)
+		json.Unmarshal(healthQuestionsJSON, &app.HealthQuestions)
+
+		if len(fraudFlagsJSON) > 0 {
+			json.Unmarshal(fraudFlagsJSON, &app.FraudFlags)
+		}
+
+		if underwriterID.Valid {
+			app.UnderwriterID = &underwriterID.String
+		}
+		if underwriterNotes.Valid {
+			app.UnderwriterNotes = underwriterNotes.String
+		}
+		if rejectionReason.Valid {
+			app.RejectionReason = rejectionReason.String
+		}
+		if riskScore.Valid {
+			score := int(riskScore.Int64)
+			app.RiskScore = &score
+			if score <= 30 {
+				app.RiskLevel = "low"
+			} else if score <= 60 {
+				app.RiskLevel = "medium"
+			} else {
+				app.RiskLevel = "high"
+			}
+		}
+		if riskAnalysisDetail.Valid {
+			app.RiskAnalysisDetail = riskAnalysisDetail.String
+		}
+		if riskAnalyzedAt.Valid {
+			app.RiskAnalyzedAt = &riskAnalyzedAt.Time
+		}
+		if submittedAt.Valid {
+			app.SubmittedAt = &submittedAt.Time
+		}
+		if reviewedAt.Valid {
+			app.ReviewedAt = &reviewedAt.Time
+		}
+		if approvedAt.Valid {
+			app.ApprovedAt = &approvedAt.Time
+		}
+
+		apps = append(apps, app)
+	}
+
+	return apps, total, nil
 }
 
 func (r *ApplicationRepository) Update(ctx context.Context, app *domain.Application) error {
@@ -223,7 +434,7 @@ func (r *ApplicationRepository) UpdateStatus(ctx context.Context, id, status str
 		UPDATE applications
 		SET status = $1, underwriter_id = $2, underwriter_notes = $3, 
 			rejection_reason = $4, reviewed_at = $5, 
-			approved_at = CASE WHEN $1 = 'approved' THEN $6 ELSE approved_at END,
+			approved_at = CASE WHEN status = 'approved' THEN $6 ELSE approved_at END,
 			updated_at = $7
 		WHERE id = $8
 	`

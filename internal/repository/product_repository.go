@@ -9,15 +9,17 @@ import (
 	"time"
 
 	"github.com/IlucielI/insurance-policy-core-api/internal/domain"
+	"github.com/IlucielI/insurance-policy-core-api/internal/infrastructure/cache"
 	"github.com/google/uuid"
 )
 
 type ProductRepository struct {
-	db *sql.DB
+	db    *sql.DB
+	cache *cache.RedisClient
 }
 
-func NewProductRepository(db *sql.DB) *ProductRepository {
-	return &ProductRepository{db: db}
+func NewProductRepository(db *sql.DB, cache *cache.RedisClient) *ProductRepository {
+	return &ProductRepository{db: db, cache: cache}
 }
 
 func (r *ProductRepository) Create(ctx context.Context, product *domain.Product) error {
@@ -40,6 +42,12 @@ func (r *ProductRepository) Create(ctx context.Context, product *domain.Product)
 		product.MinPaymentTerm, product.MaxPaymentTerm, product.BasePremiumRate,
 		ageFactorJSON, product.IsActive, product.CreatedAt, product.UpdatedAt,
 	)
+	
+	// Invalidate list cache on create
+	if err == nil && r.cache != nil {
+		_ = r.cache.Delete(ctx, "products:list:*")
+	}
+	
 	return err
 }
 
@@ -104,6 +112,23 @@ func (r *ProductRepository) GetBySlug(ctx context.Context, slug string) (*domain
 }
 
 func (r *ProductRepository) List(ctx context.Context, filters map[string]interface{}, limit, offset int) ([]*domain.Product, int, error) {
+	// Build cache key from filters
+	cacheKey := fmt.Sprintf("products:list:%v:%d:%d", filters, limit, offset)
+	
+	// Try cache first
+	if r.cache != nil {
+		cached, err := r.cache.Get(ctx, cacheKey)
+		if err == nil && cached != "" {
+			var result struct {
+				Products []*domain.Product `json:"products"`
+				Total    int               `json:"total"`
+			}
+			if json.Unmarshal([]byte(cached), &result) == nil {
+				return result.Products, result.Total, nil
+			}
+		}
+	}
+	
 	// Build query with filters
 	whereClauses := []string{}
 	args := []interface{}{}
@@ -173,6 +198,18 @@ func (r *ProductRepository) List(ctx context.Context, filters map[string]interfa
 
 		products = append(products, product)
 	}
+	
+	// Cache result for 5 minutes
+	if r.cache != nil {
+		result := struct {
+			Products []*domain.Product `json:"products"`
+			Total    int               `json:"total"`
+		}{Products: products, Total: total}
+		
+		if cached, err := json.Marshal(result); err == nil {
+			_ = r.cache.Set(ctx, cacheKey, string(cached), 5*time.Minute)
+		}
+	}
 
 	return products, total, nil
 }
@@ -197,11 +234,145 @@ func (r *ProductRepository) Update(ctx context.Context, product *domain.Product)
 		product.MinPaymentTerm, product.MaxPaymentTerm, product.BasePremiumRate,
 		ageFactorJSON, product.IsActive, product.UpdatedAt, product.ID,
 	)
+	
+	// Invalidate cache on update
+	if err == nil && r.cache != nil {
+		_ = r.cache.Delete(ctx, "products:list:*")
+	}
+	
 	return err
 }
 
 func (r *ProductRepository) Delete(ctx context.Context, id string) error {
 	query := `DELETE FROM products WHERE id = $1`
 	_, err := r.db.ExecContext(ctx, query, id)
+	
+	// Invalidate cache on delete
+	if err == nil && r.cache != nil {
+		_ = r.cache.Delete(ctx, "products:list:*")
+	}
+	
 	return err
+}
+
+// SaveEmbedding saves embedding for a product
+func (r *ProductRepository) SaveEmbedding(ctx context.Context, productID, chunkType, chunkText string, embedding []float32) error {
+	// Convert []float32 to string format for pgvector
+	embeddingStr := "["
+	for i, val := range embedding {
+		if i > 0 {
+			embeddingStr += ","
+		}
+		embeddingStr += fmt.Sprintf("%f", val)
+	}
+	embeddingStr += "]"
+
+	query := `
+		INSERT INTO product_embeddings (product_id, chunk_type, chunk_text, embedding)
+		VALUES ($1, $2, $3, $4::vector)
+		ON CONFLICT (product_id, chunk_type) 
+		DO UPDATE SET chunk_text = $3, embedding = $4::vector, created_at = NOW()
+	`
+	_, err := r.db.ExecContext(ctx, query, productID, chunkType, chunkText, embeddingStr)
+	return err
+}
+
+// SemanticSearch performs semantic search using pgvector cosine similarity
+func (r *ProductRepository) SemanticSearch(ctx context.Context, queryEmbedding []float32, limit int) ([]*domain.Product, error) {
+	if limit <= 0 {
+		limit = 5
+	}
+
+	// Convert []float32 to string format for pgvector
+	embeddingStr := "["
+	for i, val := range queryEmbedding {
+		if i > 0 {
+			embeddingStr += ","
+		}
+		embeddingStr += fmt.Sprintf("%f", val)
+	}
+	embeddingStr += "]"
+
+	// Use pgvector cosine similarity (1 - cosine_distance = cosine_similarity)
+	query := `
+		SELECT DISTINCT p.id, p.name, p.slug, p.category, p.description, p.coverage_details, 
+			p.min_sum_assured, p.max_sum_assured, p.min_payment_term, p.max_payment_term, 
+			p.base_premium_rate, p.age_factor, p.is_active, p.created_at, p.updated_at,
+			1 - (pe.embedding <=> $1::vector) as similarity
+		FROM products p
+		INNER JOIN product_embeddings pe ON p.id = pe.product_id
+		WHERE p.is_active = true
+		ORDER BY pe.embedding <=> $1::vector
+		LIMIT $2
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, embeddingStr, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	products := []*domain.Product{}
+	for rows.Next() {
+		product := &domain.Product{}
+		var coverageDetailsJSON, ageFactorJSON []byte
+		var similarity float64
+
+		err := rows.Scan(
+			&product.ID, &product.Name, &product.Slug, &product.Category, &product.Description,
+			&coverageDetailsJSON, &product.MinSumAssured, &product.MaxSumAssured,
+			&product.MinPaymentTerm, &product.MaxPaymentTerm, &product.BasePremiumRate,
+			&ageFactorJSON, &product.IsActive, &product.CreatedAt, &product.UpdatedAt,
+			&similarity,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		json.Unmarshal(coverageDetailsJSON, &product.CoverageDetails)
+		json.Unmarshal(ageFactorJSON, &product.AgeFactor)
+
+		products = append(products, product)
+	}
+
+	return products, nil
+}
+
+// GetAllProducts returns all products for embedding generation
+func (r *ProductRepository) GetAllProducts(ctx context.Context) ([]*domain.Product, error) {
+	query := `
+		SELECT id, name, slug, category, description, coverage_details, 
+			min_sum_assured, max_sum_assured, min_payment_term, max_payment_term, 
+			base_premium_rate, age_factor, is_active, created_at, updated_at
+		FROM products
+	`
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	products := []*domain.Product{}
+	for rows.Next() {
+		product := &domain.Product{}
+		var coverageDetailsJSON, ageFactorJSON []byte
+
+		err := rows.Scan(
+			&product.ID, &product.Name, &product.Slug, &product.Category, &product.Description,
+			&coverageDetailsJSON, &product.MinSumAssured, &product.MaxSumAssured,
+			&product.MinPaymentTerm, &product.MaxPaymentTerm, &product.BasePremiumRate,
+			&ageFactorJSON, &product.IsActive, &product.CreatedAt, &product.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		json.Unmarshal(coverageDetailsJSON, &product.CoverageDetails)
+		json.Unmarshal(ageFactorJSON, &product.AgeFactor)
+
+		products = append(products, product)
+	}
+
+	return products, nil
 }

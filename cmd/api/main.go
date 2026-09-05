@@ -62,6 +62,7 @@ func main() {
 	authHandler := http.NewAuthHandler(authUsecase)
 	chatHandler := http.NewChatHandler(chatUsecase)
 	aiHandler := http.NewAIHandler(applicationUsecase, llmService)
+	applicationHandler := http.NewApplicationHandler(applicationUsecase)
 	policyHandler := http.NewPolicyHandler(policyUsecase)
 	claimHandler := http.NewClaimHandler(claimUsecase)
 	billingHandler := http.NewBillingHandler(billingUsecase)
@@ -111,14 +112,10 @@ func main() {
 	products.Get("/:id", productHandler.GetProduct)
 	products.Post("/:id/calculate-premium", productHandler.CalculatePremium)
 
-	// Applications routes (TODO: implement handler)
+	// Applications routes
 	applications := api.Group("/applications")
-	applications.Post("/", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"message": "Create application endpoint"})
-	})
-	applications.Get("/:id", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"message": "Get application endpoint"})
-	})
+	applications.Post("/", applicationHandler.CreateApplication)
+	applications.Get("/:id", applicationHandler.GetApplication)
 
 	// Chat routes
 	chat := api.Group("/chat")
@@ -151,12 +148,9 @@ func main() {
 
 	// Admin routes (TODO: add auth middleware)
 	admin := api.Group("/admin")
-	admin.Get("/applications", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"message": "List applications endpoint"})
-	})
-	admin.Patch("/applications/:id/status", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"message": "Update application status endpoint"})
-	})
+	admin.Get("/applications", applicationHandler.ListApplications)
+	admin.Put("/applications/:id/status", applicationHandler.UpdateStatus)
+	admin.Post("/applications/bulk-status", applicationHandler.BulkUpdateStatus)
 	
 	// AI routes
 	admin.Post("/ai-review/:id", aiHandler.ReviewApplication)

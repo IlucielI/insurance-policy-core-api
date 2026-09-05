@@ -1,0 +1,35 @@
+FROM golang:1.26-alpine AS builder
+
+WORKDIR /app
+
+# Install dependencies
+RUN apk add --no-cache git
+
+# Copy go mod files
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source
+COPY . .
+
+# Build binary
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-w -s" -o insurance-api cmd/api/main.go
+
+# Runtime image
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates tzdata wget
+
+WORKDIR /app
+
+# Copy binary
+COPY --from=builder /app/insurance-api .
+COPY --from=builder /app/migrations ./migrations
+
+EXPOSE 8080
+
+# Health check configuration
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+
+CMD ["./insurance-api"]
